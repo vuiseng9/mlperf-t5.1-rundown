@@ -1,2 +1,79 @@
-# mlperf-t5.1-rundown
-A Quick Rundown of MLPerf v5.1 Training on the New Llama3.1-8B, Flux.1 Models
+### Quick Rundown of MLPerf v5.1 Training 
+*on the New Llama3.1-8B, Flux.1 Models.* — 2025/11/13
+
+Few days ago, MLCommons [released][v5.1-rel-news] the MLPerf Training v5.1 results, with a record level of participation.
+
+Combed through the [data][tableau-v5.1] for my own use, and figured might as well share it. Also included Docker instructions to reproduce the runs locally, no SLURM system and no terabytes of download required.
+
+MLPerf covers many benchmarks, but here focuses only on the new ones: [Llama3.1-8B][new-llama3.1-8b] (405B), and [Flux.1][new-flux.1], and only the GPU submissions as these represent the most widely used today.
+
+
+Links:
+* [MLCommons Release News][v5.1-rel-news], [Github][v5.1-github]
+* [MLPerf Training v5.1 Full Results][tableau-v5.1]
+* [NVIDIA's Blog][nvd-v5.1-blog], [Tech Dive][nvd-v5.1-tech]
+* [AMD's Blog][amd-v5.1-blog], [Tech Dive][amd-v5.1-tech], [Repro Tutorials][amd-v5.1-tuts]
+* Others: [a][nebius], [b][hpwire]
+
+Maybe useful: for local single node 8xGPU runs, [nvidia][vs-dhub-nvd]/[steps][vs-step-nvd], [amd][vs-dhub-amd]/[steps][vs-step-amd]. llama3.1-8b for now. Flux may follow.
+
+----
+<img src="assets/gpu-to-gpu-llama31-8b-pretraining.png" width="600" style="height:auto;">
+
+| time-to-train (mins) | GPU            | Organization      | Public ID |
+|----------------------|----------------|-------------------|-----------|
+| 122.929              | MI350X (fp8)   | AMD               | 5.1-0017  |
+| 99.709               | MI355X (fp8)   | AMD               | 5.1-0018  |
+| 84.379               | B200 (fp4)     | Nvidia/Supermicro | 5.1-0081  |
+| 79.325               | GB200 (fp4)    | Nvidia            | 5.1-0067  |
+| 75.841               | B300 (fp4)     | Nvidia/Nebius     | 5.1-0008  |
+| 67.373               | GB300 (fp4)    | Nvidia            | 5.1-0058  |
+
+1. [How][nvd-v5.1-blog] (G)B300 (Blackwell Ultra) get so fast? 
+    * Industry's first FP4 recipe using NVFP4 precision (with last few iterations in FP8).
+    * 1.5× Tensor Core uplift over G(B)200
+    * 2× attention speed via HW-accelerated Softmax
+    * FP8 BMM in Attention, previously in BF16
+2. GBs are faster than Bs likely due to NVLinked Grace CPU-GPU.
+3. AMD's [optimizations][amd-v5.1-blog]: GEMM Tile Sizing, BF16 FlashAttention v3, DataLoader Tuning (15mins->3mins validation). See the blog for LORA optimization.
+
+Datasheet: [B300][b300-datasheet], [B200][b200-datasheet], [MI355X][mi355x-datasheet], [MI350X][mi350x-datasheet].
+
+----
+### *Almost* Log-linear Cluster Scaling
+*Train 8B, 405B LLM and a Flux.1 in one bio break, if you have thousands of GPUs. Okay, hyped but not too far 😆*
+
+### 8B
+<img src="assets/cluster-scale-llama31-8b.png" width="600" style="height:auto;">
+
+### 405B
+<img src="assets/cluster-scale-llama31-405b.png" width="600" style="height:auto;">
+
+---
+### Flux.1
+<img src="assets/cluster-scale-flux.1.png" width="600" style="height:auto;">
+
+> Results from more organizations available, we only pick those with large range of GPU counts.
+
+[//]: # (Links)
+
+[vs-dhub-nvd]: https://hub.docker.com/repository/docker/vuiseng9/mlperfv5.1-nvidia-smci/general
+[vs-step-nvd]: https://github.com/vuiseng9/mlperf-train-v5.1/blob/251112-local/Supermicro/benchmarks/llama31_8b/implementations/Blackwell_llama31_8b/HOW_TO_RUN_LOCAL.md
+[vs-dhub-amd]: https://hub.docker.com/repository/docker/vuiseng9/mlperfv5.1-amd-llama31_8b/general
+[vs-step-amd]: https://github.com/vuiseng9/mlperf-train-v5.1/blob/251112-local/AMD/benchmarks/llama31_8b/implementations/MI355X_EPYC_9575F_pytorch_llama3_8b/HOW_TO_RUN_LOCAL.md
+[v5.1-rel-news]: https://mlcommons.org/2025/11/training-v5-1-results
+[v5.1-github]: https://github.com/mlcommons/training_results_v5.1
+[tableau-v5.1]: https://mlcommons.org/benchmarks/training/
+[nvd-v5.1-blog]: https://blogs.nvidia.com/blog/mlperf-training-benchmark-blackwell-ultra/
+[nvd-v5.1-tech]: https://developer.nvidia.com/blog/nvidia-blackwell-architecture-sweeps-mlperf-training-v5-1-benchmarks
+[amd-v5.1-blog]: https://www.amd.com/en/blogs/2025/accelerating-ai-training.html
+[amd-v5.1-tech]: https://rocm.blogs.amd.com/artificial-intelligence/mlperf-training-v5.1/README.html
+[amd-v5.1-tuts]: https://rocm.blogs.amd.com/artificial-intelligence/mlperf-training5.1-repro/README.html
+[nebius]: https://nebius.com/blog/posts/mlperf-training-v5-1-results
+[hpwire]: https://www.hpcwire.com/aiwire/2025/11/12/mlcommons-releases-mlperf-training-v5-1-results/
+[new-llama3.1-8b]: https://mlcommons.org/2025/10/training-llama-3-1-8b/
+[new-flux.1]: https://mlcommons.org/2025/10/training-flux1/
+[b300-datasheet]: https://resources.nvidia.com/en-us-dgx-systems/dgx-b300-datasheet
+[b200-datasheet]: https://resources.nvidia.com/en-us-dgx-systems/dgx-b200-datasheet
+[mi355x-datasheet]: https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/product-briefs/amd-instinct-mi355x-gpu-brochure.pdf
+[mi350x-datasheet]: https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/product-briefs/amd-instinct-mi350x-gpu-brochure.pdf
