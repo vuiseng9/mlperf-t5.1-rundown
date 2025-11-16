@@ -20,6 +20,10 @@ Maybe useful: for local single node 8xGPU runs, [nvidia][vs-dhub-nvd]/[steps][vs
 ----
 <img src="assets/gpu-to-gpu-llama31-8b-pretraining.png" width="600" style="height:auto;">
 
+* ** is [our local estimate](./assets/b200_fp8_estimate.png) based using the packaged FP8 recipe. Optimistic as we only account train and eval loop, ignoring misc. which can be up to additional 5% based on logs of other submissions.
+* MI355X vs (G)B200 fp8 comparison is difficult given config differences (batch size, attn impl, ...) and HW feature and MAC capacity. 
+* While, on paper specs, MI355X edges B200, the relative of FP8 makes sense *but but but*, AMD uses batch size 32 vs 16 on Nvidia side, it means AMD is running half of gradient updates while Nvidia has smaller load per forward/backward pass. It is not clear which has the advantage here, as software implementation/optimization could differ a great deal too (known: BF16 vs FP8 attn).
+
 | time-to-train (mins) | GPU            | Organization      | Public ID |
 |----------------------|----------------|-------------------|-----------|
 | 122.929              | MI350X (fp8)   | AMD               | 5.1-0017  |
@@ -28,16 +32,21 @@ Maybe useful: for local single node 8xGPU runs, [nvidia][vs-dhub-nvd]/[steps][vs
 | 79.325               | GB200 (fp4)    | Nvidia            | 5.1-0067  |
 | 75.841               | B300 (fp4)     | Nvidia/Nebius     | 5.1-0008  |
 | 67.373               | GB300 (fp4)    | Nvidia            | 5.1-0058  |
+Datasheet: [B300][b300-datasheet], [B200][b200-datasheet], [MI355X][mi355x-datasheet], [MI350X][mi350x-datasheet].
 
 1. [How][nvd-v5.1-blog] (G)B300 (Blackwell Ultra) get so fast? 
     * Industry's first FP4 recipe using NVFP4 precision (with last few iterations in FP8).
-    * 1.5× Tensor Core uplift over G(B)200
+    * 1.5× Tensor Core uplift over (G)B200
     * 2× attention speed via HW-accelerated Softmax
     * FP8 BMM in Attention, previously in BF16
 2. GBs are faster than Bs likely due to NVLinked Grace CPU-GPU.
 3. AMD's [optimizations][amd-v5.1-blog]: GEMM Tile Sizing, BF16 FlashAttention v3, DataLoader Tuning (15mins->3mins validation). See the blog for LORA optimization.
 
-Datasheet: [B300][b300-datasheet], [B200][b200-datasheet], [MI355X][mi355x-datasheet], [MI350X][mi350x-datasheet].
+Details: 
+* We only take the fastest per GPU type and only 8xGPU submissions here.
+* Training specifics: 12288 train, 1024 eval samples per train-eval loop. Typically takes 172,032 samples to reach convergence. Sequence length 8192, batch size depends, 16 Nvidia, 32 AMD. 
+* Advanced features in [NVFP4 paper][nvfp4-paper] such as stochastic rounding, rotation-based 2D quantization are disabled, most likely means that it behaves just like fp8 recipe except that nvfp4 is used.
+* See [our local estimate](./assets/b200_fp8_estimate.png), per train step, NVFP4 is faster 1.23X of per-tensor FP8 on B200.
 
 ----
 ### *Almost* Log-linear Cluster Scaling
@@ -50,10 +59,13 @@ Datasheet: [B300][b300-datasheet], [B200][b200-datasheet], [MI355X][mi355x-datas
 <img src="assets/cluster-scale-llama31-405b.png" width="600" style="height:auto;">
 
 ---
-### Flux.1
+### Flux.1 (11.9B)
 <img src="assets/cluster-scale-flux.1.png" width="600" style="height:auto;">
 
 > Results from more organizations available, we only pick those with large range of GPU counts.
+
+On TorchTitan framework, most likely BF16/32? unless torchao is used. To find out.
+
 
 [//]: # (Links)
 
@@ -77,3 +89,4 @@ Datasheet: [B300][b300-datasheet], [B200][b200-datasheet], [MI355X][mi355x-datas
 [b200-datasheet]: https://resources.nvidia.com/en-us-dgx-systems/dgx-b200-datasheet
 [mi355x-datasheet]: https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/product-briefs/amd-instinct-mi355x-gpu-brochure.pdf
 [mi350x-datasheet]: https://www.amd.com/content/dam/amd/en/documents/instinct-tech-docs/product-briefs/amd-instinct-mi350x-gpu-brochure.pdf
+[nvfp4-paper]: https://arxiv.org/abs/2506.08027
