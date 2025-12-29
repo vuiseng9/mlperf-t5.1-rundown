@@ -15,7 +15,9 @@ Links:
 * [AMD's Blog][amd-v5.1-blog], [Tech Dive][amd-v5.1-tech], [Repro Tutorials][amd-v5.1-tuts]
 * Others: [a][nebius], [b][hpwire]
 
-Maybe useful: for local single node 8xGPU runs, [nvidia][vs-dhub-nvd]/[steps][vs-step-nvd], [amd][vs-dhub-amd]/[steps][vs-step-amd]. llama3.1-8b for now. Flux may follow.
+Maybe useful for you: local single node 8xGPU runs,
+* llama3.1-8b: [nvidia][vs-dhub-nvd]/[steps][vs-step-nvd], [amd][vs-dhub-amd]/[steps][vs-step-amd]. 
+* flux.1:  [nvidia][vs-dhub-nvd-flux]/[steps][vs-step-nvd-flux].
 
 ----
 ### Per GPU Model x 8
@@ -70,8 +72,16 @@ Datasheet: [B300][b300-datasheet], [B200][b200-datasheet], [MI355X][mi355x-datas
 
 > Results from more organizations available, we only pick those with large range of GPU counts.
 
-On TorchTitan framework, most likely BF16/32? unless torchao is used. To find out.
+* MLCommons reference pretraining for FLUX.1 uses the [TorchTitan](https://github.com/mlcommons/training/tree/master/text_to_image) framework, while most submissions rely on NeMo.
 
+* The model is a customized subclass of MegatronFluxModel, trained in MXFP8 using Transformer Engine.
+
+* Scaling is handled via Megatron DP with distributed optimizer (ZeRO-1), as defined in `flux1_schnell.yaml`.
+
+* We sampled multiple operating points from the plot and inspected the corresponding logs. We confirm that global batch size varies across scales with no gradient accumulation, and that learning rates are adjusted accordingly as you would expect.
+
+* Our local [reproduction][vs-step-nvd-flux] is based on the University of Florida submission and adapted to run on a single 8×B200 node. This setup is intended for implementation understanding rather than benchmarking. Modifications include using a small CC12M subset for faster iteration (while retaining the full COCO validation set) and disabling IB interface. 
+    `code --diff flux_training_scale.sh flux_training_local.sh`
 
 [//]: # (Links)
 
@@ -79,6 +89,8 @@ On TorchTitan framework, most likely BF16/32? unless torchao is used. To find ou
 [vs-step-nvd]: https://github.com/vuiseng9/mlperf-train-v5.1/blob/251112-local/Supermicro/benchmarks/llama31_8b/implementations/Blackwell_llama31_8b/HOW_TO_RUN_LOCAL.md
 [vs-dhub-amd]: https://hub.docker.com/repository/docker/vuiseng9/mlperfv5.1-amd-llama31_8b/general
 [vs-step-amd]: https://github.com/vuiseng9/mlperf-train-v5.1/blob/251112-local/AMD/benchmarks/llama31_8b/implementations/MI355X_EPYC_9575F_pytorch_llama3_8b/HOW_TO_RUN_LOCAL.md
+[vs-dhub-nvd-flux]: https://hub.docker.com/repository/docker/vuiseng9/mlperfv5.1-nvidia-florida/general
+[vs-step-nvd-flux]: https://github.com/vuiseng9/mlperf-train-v5.1/blob/251112-local/University-of-Florida/benchmarks/flux1/implementations/b200_nemo/HOW_TO_RUN_LOCAL.md
 [v5.1-rel-news]: https://mlcommons.org/2025/11/training-v5-1-results
 [v5.1-github]: https://github.com/mlcommons/training_results_v5.1
 [tableau-v5.1]: https://mlcommons.org/benchmarks/training/
