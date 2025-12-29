@@ -3,7 +3,7 @@
 
 Few days ago, MLCommons [released][v5.1-rel-news] the MLPerf Training v5.1 results, with a record level of participation.
 
-Combed through the [data][tableau-v5.1] for my own use, and figured might as well share it. Also included Docker instructions to reproduce the runs locally, no SLURM system and no terabytes of download required.
+Combed through the [data][tableau-v5.1] for my own use, and figured might as well share it. Docker instructions are included to reproduce the runs locally, intentional bypass the needs of SLURM system and terabytes of download.
 
 MLPerf covers many benchmarks, but here focuses only on the new ones: [Llama3.1-8B][new-llama3.1-8b] (405B), and [Flux.1][new-flux.1], and only the GPU submissions as these represent the most widely used today.
 
@@ -18,11 +18,9 @@ Links:
 Maybe useful: for local single node 8xGPU runs, [nvidia][vs-dhub-nvd]/[steps][vs-step-nvd], [amd][vs-dhub-amd]/[steps][vs-step-amd]. llama3.1-8b for now. Flux may follow.
 
 ----
-<img src="assets/gpu-to-gpu-llama31-8b-pretraining.png" width="600" style="height:auto;">
+### Per GPU Model x 8
 
-* ** is [our local estimate](./assets/b200_fp8_estimate.png) based using the packaged FP8 recipe. Optimistic as we only account train and eval loop, ignoring misc. which can be up to additional 5% based on logs of other submissions.
-* MI355X vs (G)B200 fp8 comparison is difficult given config differences (batch size, attn impl, ...) and HW feature and MAC capacity. 
-* While, on paper specs, MI355X edges B200, the relative of FP8 makes sense *but but but*, AMD uses batch size 32 vs 16 on Nvidia side, it means AMD is running half of gradient updates while Nvidia has smaller load per forward/backward pass. It is not clear which has the advantage here, as software implementation/optimization could differ a great deal too (known: BF16 vs FP8 attn).
+<img src="assets/gpu-to-gpu-llama31-8b-pretraining.png" width="600" style="height:auto;">
 
 | time-to-train (mins) | GPU            | Organization      | Public ID |
 |----------------------|----------------|-------------------|-----------|
@@ -34,19 +32,27 @@ Maybe useful: for local single node 8xGPU runs, [nvidia][vs-dhub-nvd]/[steps][vs
 | 67.373               | GB300 (fp4)    | Nvidia            | 5.1-0058  |
 Datasheet: [B300][b300-datasheet], [B200][b200-datasheet], [MI355X][mi355x-datasheet], [MI350X][mi350x-datasheet].
 
-1. [How][nvd-v5.1-blog] (G)B300 (Blackwell Ultra) get so fast? 
+* We only take the fastest per GPU type and only 8xGPU submissions here. Most NVIDIA GPU submissions are evaluated in FP4, whereas AMD GPU submissions are conducted in FP8. 
+
+* ** in the figure is [our estimate](./assets/b200_fp8_estimate.png) on B200 fp8 based on the provided FP8 recipe included in the submission. The intent is to approximate the performance uplift achievable when transitioning from FP8 to FP4. We measure elapsed time per training and validation step and assume the same number of steps to convergence as FP4. This estimate is slightly optimistic, as it accounts only for the training and evaluation loops and excludes miscellaneous overheads, which can contribute up to an additional ~5% based on logs from other submissions.
+
+* For an 8×B200 setup training Llama-3.1-8B under these hyperparameters, **our estimate leads to a 1.22× speedup when moving from FP8 to FP4**. This aligns with our [early](https://github.com/vuiseng9/nemo-perf-nvfp4/tree/main) local benchmarking results observed when NVFP4 recipe was first released in Transformer Engine. While the two benchmarks differs in hyperparameters, I generally keep in mind that the expected gain is around 20%, though it ultimately depends on the specific hyperparameters.
+
+* MI355X edges B200 in fp8 comparison. While it aligns to on paper HW spec, the comparison is inherently difficult given config differences (batch size, attention implementation, ...). E.g. AMD uses batch size 32 vs 16 on Nvidia side, it means AMD is running half of gradient updates while Nvidia has smaller load per forward/backward pass. It is not clear which has the advantage here, as software implementation/optimization could differ a great deal too. Also in practice, we do care about the RDMA interconnects for scale out training which these sets of numbers do not reflect. 
+
+* [How][nvd-v5.1-blog] (G)B300 (Blackwell Ultra) get so fast? 
     * Industry's first FP4 recipe using NVFP4 precision (with last few iterations in FP8).
     * 1.5× Tensor Core uplift over (G)B200
     * 2× attention speed via HW-accelerated Softmax
     * FP8 BMM in Attention, previously in BF16
-2. GBs are faster than Bs likely due to NVLinked Grace CPU-GPU.
-3. AMD's [optimizations][amd-v5.1-blog]: GEMM Tile Sizing, BF16 FlashAttention v3, DataLoader Tuning (15mins->3mins validation). See the blog for LORA optimization.
+* GBs faster than Bs are likely due to NVLinked Grace CPU-GPU.
 
-Details: 
-* We only take the fastest per GPU type and only 8xGPU submissions here.
-* Training specifics: 12288 train, 1024 eval samples per train-eval loop. Typically takes 172,032 samples to reach convergence. Sequence length 8192, batch size depends, 16 Nvidia, 32 AMD. 
-* Advanced features in [NVFP4 paper][nvfp4-paper] such as stochastic rounding, rotation-based 2D quantization are disabled, most likely means that it behaves just like fp8 recipe except that nvfp4 is used.
-* See [our local estimate](./assets/b200_fp8_estimate.png), per train step, NVFP4 is faster 1.23X of per-tensor FP8 on B200.
+* AMD's [optimizations][amd-v5.1-blog]: GEMM Tile Sizing, BF16 FlashAttention v3, DataLoader Tuning (15mins->3mins validation). See the blog for LORA optimization.
+
+* Optional Contexts:
+    * Training specifics: 12288 train, 1024 eval samples per train-eval loop. Typically takes 172,032 samples to reach convergence. Sequence length 8192, batch size depends, 16 Nvidia, 32 AMD. 
+    * Advanced features in [NVFP4 paper][nvfp4-paper] such as stochastic rounding, rotation-based 2D quantization are disabled, most likely means that it behaves just like fp8 recipe except that nvfp4 is used.
+
 
 ----
 ### *Almost* Log-linear Cluster Scaling
